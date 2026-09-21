@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>아들일까? 딸일까?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue:#bfe0f5; --pink:#f8c6d4; --ink:#3a2e3f; --rose:#e2456f; --sky:#3f8fc4;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:'Jua','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  color:var(--ink);background:#fff;overflow:hidden;
+}
+.screen{
+  position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+  padding:calc(env(safe-area-inset-top,0px) + 24px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);
+  text-align:center;
+}
+.screen.on{display:flex}
+
+/* 1. 시작 화면: 파랑/분홍 대각선 반반 */
+#intro{background:linear-gradient(115deg,var(--blue) 0 50%,var(--pink) 50% 100%)}
+#intro h1{font-weight:400;font-size:clamp(44px,15vw,72px);line-height:1.15;letter-spacing:-.02em}
+#intro h1 .b{color:var(--sky)} #intro h1 .p{color:var(--rose)}
+#intro p{margin-top:14px;font-size:18px;opacity:.75}
+.q{font-size:64px;margin-bottom:8px;animation:bob 2.4s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-10px) rotate(-4deg)}}
+.btn{
+  margin-top:40px;border:0;cursor:pointer;font:inherit;font-size:22px;color:#fff;
+  background:var(--ink);padding:18px 40px;border-radius:999px;
+  box-shadow:0 6px 0 rgba(0,0,0,.25);transition:transform .1s,box-shadow .1s;
+}
+.btn:active{transform:translateY(4px);box-shadow:0 2px 0 rgba(0,0,0,.25)}
+.btn:focus-visible{outline:3px solid var(--rose);outline-offset:3px}
+
+/* 2. 영상 화면 */
+#video-screen{background:#000;padding:0}
+#video-screen video{width:100%;height:100%;object-fit:contain;background:#000}
+#fallback{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+  background:linear-gradient(115deg,var(--blue) 0 50%,var(--pink) 50% 100%)}
+#count{font-size:38vw;max-width:220px;font-size:min(38vw,200px);line-height:1;color:var(--ink);animation:pop 1s ease-in-out infinite}
+@keyframes pop{0%{transform:scale(.6);opacity:0}30%{transform:scale(1.1);opacity:1}100%{transform:scale(1)}}
+#fallback small{margin-top:16px;font-size:20px;opacity:.7}
+
+/* 3. 결과 화면 */
+#result{background:linear-gradient(180deg,#ffe3ec,var(--pink))}
+#result h2{font-weight:400;font-size:clamp(48px,17vw,84px);color:var(--rose);letter-spacing:-.02em;
+  animation:land .7s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes land{from{transform:scale(.3) rotate(-8deg);opacity:0}}
+.photo{
+  margin-top:24px;width:min(78vw,340px);aspect-ratio:1/1;border-radius:32px;overflow:hidden;
+  background:#fff;border:6px solid #fff;box-shadow:0 10px 30px rgba(226,69,111,.3);
+  display:flex;align-items:center;justify-content:center;font-size:110px;
+  animation:land .7s .25s cubic-bezier(.2,1.4,.4,1) both;
+}
+.photo img{width:100%;height:100%;object-fit:cover}
+#result p{margin-top:22px;font-size:22px}
+.again{margin-top:26px;background:none;border:0;font:inherit;font-size:16px;color:var(--ink);opacity:.6;text-decoration:underline;cursor:pointer;padding:8px}
+canvas#fx{position:fixed;inset:0;pointer-events:none;z-index:10}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+
+<!-- 1. 시작 -->
+<section id="intro" class="screen on">
+  <div class="q">🍼</div>
+  <h1><span class="b">아들</span>일까?<br><span class="p">딸</span>일까?</h1>
+  <p>미니뎅의 성별을 공개합니다</p>
+  <button class="btn" id="go">확인하러 가기</button>
+</section>
+
+<!-- 2. 영상 -->
+<section id="video-screen" class="screen">
+  <video id="vid" playsinline webkit-playsinline preload="auto"></video>
+  <div id="fallback"><div id="count">3</div><small>두근두근…</small></div>
+</section>
+
+<!-- 3. 결과 -->
+<section id="result" class="screen">
+  <h2>미니뎅은 딸!</h2>
+  <div class="photo" id="photo">🎀</div>
+  <p>💗 할무니 할부지 내년에 봬요! 💗</p>
+  <button class="again" id="again">처음부터 다시 보기</button>
+</section>
+
+<canvas id="fx"></canvas>
+
+<script>
+/* ===== 여기만 수정하세요 ===== */
+const CONFIG = {
+  VIDEO_SRC: "run.mp4",     // 영상 파일 (index.html과 같은 폴더). 없으면 카운트다운이 대신 나옵니다.
+  IMAGE_SRC: "photo.png",     // 결과 화면 이미지. 없으면 리본 이모지가 나옵니다.
+  FALLBACK_SECONDS: 3         // 영상이 없을 때 카운트다운 초
+};
+/* ============================ */
+
+const $ = id => document.getElementById(id);
+const show = id => {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  $(id).classList.add('on');
+};
+
+// 결과 이미지: 파일이 있으면 교체, 없으면 이모지 유지
+(function(){
+  const img = new Image();
+  img.onload = () => { $('photo').textContent = ''; $('photo').appendChild(img); };
+  img.alt = '미니뎅은 딸!';
+  img.src = CONFIG.IMAGE_SRC;
+})();
+
+let revealed = false;
+function reveal(){
+  if (revealed) return;
+  revealed = true;
+  show('result');
+  confetti();
+  if (navigator.vibrate) navigator.vibrate([120,60,120]);
+}
+
+function fallbackCountdown(){
+  $('vid').style.display = 'none';
+  $('fallback').style.display = 'flex';
+  let n = CONFIG.FALLBACK_SECONDS;
+  $('count').textContent = n;
+  const t = setInterval(() => {
+    n--;
+    if (n <= 0){ clearInterval(t); reveal(); return; }
+    $('count').textContent = n;
+  }, 1000);
+}
+
+$('go').addEventListener('click', () => {
+  revealed = false;
+  show('video-screen');
+  const v = $('vid');
+  v.style.display = 'block';
+  $('fallback').style.display = 'none';
+  v.onended = reveal;
+  v.onerror = fallbackCountdown;
+  v.src = CONFIG.VIDEO_SRC;
+  const p = v.play();
+  if (p && p.catch) p.catch(() => {
+    // 소리 포함 재생이 막힌 경우 음소거로 재시도, 그래도 안 되면 카운트다운
+    v.muted = true;
+    v.play().catch(fallbackCountdown);
+  });
+});
+
+$('again').addEventListener('click', () => {
+  $('vid').pause(); revealed = false; show('intro');
+});
+
+/* 색종이 */
+function confetti(){
+  const c = $('fx'), x = c.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  c.width = innerWidth*dpr; c.height = innerHeight*dpr; x.scale(dpr,dpr);
+  const colors = ['#e2456f','#f8c6d4','#ffd166','#fff','#f28aa8'];
+  const ps = Array.from({length:110},()=>({
+    x:Math.random()*innerWidth, y:-20-Math.random()*innerHeight*.6,
+    w:6+Math.random()*7, h:10+Math.random()*8, vy:2+Math.random()*3.5,
+    vx:-1+Math.random()*2, r:Math.random()*6, vr:-.2+Math.random()*.4,
+    c:colors[(Math.random()*colors.length)|0]
+  }));
+  let frames = 0;
+  (function tick(){
+    x.clearRect(0,0,innerWidth,innerHeight);
+    ps.forEach(p=>{
+      p.x+=p.vx; p.y+=p.vy; p.r+=p.vr;
+      x.save(); x.translate(p.x,p.y); x.rotate(p.r);
+      x.fillStyle=p.c; x.fillRect(-p.w/2,-p.h/2,p.w,p.h); x.restore();
+    });
+    if (++frames < 260) requestAnimationFrame(tick);
+    else x.clearRect(0,0,innerWidth,innerHeight);
+  })();
+}
+</script>
+</body>
+</html>
